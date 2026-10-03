@@ -212,6 +212,15 @@ class AdbShizukuDriver(private val context: Context) {
         }
     }
 
+    fun sendRawTouchDown(pointerId: Int, x: Float, y: Float): Boolean =
+        sendRawTouch(pointerId, 0, x, y)
+
+    fun sendRawTouchMove(pointerId: Int, x: Float, y: Float): Boolean =
+        sendRawTouch(pointerId, 1, x, y)
+
+    fun sendRawTouchUp(pointerId: Int, x: Float, y: Float): Boolean =
+        sendRawTouch(pointerId, 2, x, y)
+
     private fun sendRawTouch(pointerId: Int, action: Int, screenX: Float, screenY: Float): Boolean {
         return try {
             if (!shizukuBridge.connected) {

@@ -155,61 +155,61 @@ class AdbShizukuDriver(private val context: Context) {
 
         if (isPressed) {
             if (!heldKeys.add(keycode)) return
-
-            executeInputCommand(
-                "input keyevent $keycode"
-            )
-
-            Log.d(
-                tag,
-                "KEY DOWN keycode=$keycode"
-            )
         } else {
             if (!heldKeys.remove(keycode)) return
+        }
 
-            executeInputCommand(
-                "input keyevent $keycode"
+        try {
+            if (!shizukuBridge.connected) {
+                shizukuBridge.start()
+                Thread.sleep(150)
+            }
+
+            if (!shizukuBridge.connected) {
+                Log.w(
+                    tag,
+                    "Shizuku UserService bağlı değil: keyCode=$keycode"
+                )
+
+                if (isPressed) {
+                    heldKeys.remove(keycode)
+                } else {
+                    heldKeys.add(keycode)
+                }
+                return
+            }
+
+            val result = shizukuBridge.sendKeyState(
+                keyCode = keycode,
+                pressed = isPressed
             )
 
             Log.d(
                 tag,
-                "KEY UP keycode=$keycode"
+                "KEY ${if (isPressed) "DOWN" else "UP"} " +
+                    "keycode=$keycode result=$result"
             )
+
+            if (!result) {
+                if (isPressed) {
+                    heldKeys.remove(keycode)
+                } else {
+                    heldKeys.add(keycode)
+                }
+            }
+        } catch (e: Throwable) {
+            Log.e(
+                tag,
+                "Key injection failed keyCode=$keycode",
+                e
+            )
+
+            if (isPressed) {
+                heldKeys.remove(keycode)
+            } else {
+                heldKeys.add(keycode)
+            }
         }
-    }
-
-    fun sendTouchTap(
-        screenX: Float,
-        screenY: Float
-    ) {
-        executeInputCommand(
-            "input tap ${screenX.toInt()} ${screenY.toInt()}"
-        )
-    }
-
-    fun sendTouchSwipe(
-        x1: Float,
-        y1: Float,
-        x2: Float,
-        y2: Float,
-        durationMs: Long
-    ) {
-        executeInputCommand(
-            "input swipe ${x1.toInt()} ${y1.toInt()} " +
-                "${x2.toInt()} ${y2.toInt()} $durationMs"
-        )
-    }
-
-    fun sendRawTouchDown(pointerId: Int, screenX: Float, screenY: Float): Boolean {
-        return sendRawTouch(pointerId, ShizukuInputBridge.TOUCH_DOWN, screenX, screenY)
-    }
-
-    fun sendRawTouchMove(pointerId: Int, screenX: Float, screenY: Float): Boolean {
-        return sendRawTouch(pointerId, ShizukuInputBridge.TOUCH_MOVE, screenX, screenY)
-    }
-
-    fun sendRawTouchUp(pointerId: Int, screenX: Float, screenY: Float): Boolean {
-        return sendRawTouch(pointerId, ShizukuInputBridge.TOUCH_UP, screenX, screenY)
     }
 
     private fun sendRawTouch(pointerId: Int, action: Int, screenX: Float, screenY: Float): Boolean {
@@ -257,7 +257,24 @@ class AdbShizukuDriver(private val context: Context) {
     }
 
     fun releaseAll() {
-        heldKeys.clear()
+        try {
+            if (!shizukuBridge.connected) {
+                shizukuBridge.start()
+                Thread.sleep(150)
+            }
+
+            if (shizukuBridge.connected) {
+                shizukuBridge.releaseAllInput()
+            }
+        } catch (e: Throwable) {
+            Log.e(
+                tag,
+                "Tüm input bırakılırken hata",
+                e
+            )
+        } finally {
+            heldKeys.clear()
+        }
 
         Log.i(
             tag,

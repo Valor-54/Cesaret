@@ -50,3 +50,12 @@ fun MyApplicationTheme(
 
   MaterialTheme(colorScheme = colorScheme, typography = Typography, content = content)
 }
+
+@Composable
+fun WarPadTheme(content: @Composable () -> Unit) {
+    MyApplicationTheme(
+        darkTheme = true,
+        dynamicColor = false,
+        content = content
+    )
+}

@@ -47,10 +47,11 @@ class GamepadInputManager(private val context: Context) {
     private var activeProfile: GamepadProfile? = null
 
     /*
-     * Accessibility pointer bookkeeping.
+     * Pointer bookkeeping shared by FlexiPad and the
+     * Shizuku MotionEvent injection backend.
      *
-     * These IDs belong only to FlexiPad's internal bookkeeping.
-     * They are NOT Android MotionEvent pointer IDs.
+     * These IDs are used as real Android MotionEvent
+     * pointer IDs by InputUserService.
      */
     private val controlPointerMap = ConcurrentHashMap<String, Int>()
 private val joystickLastPosition = ConcurrentHashMap<String, Pair<Float, Float>>()
@@ -216,6 +217,13 @@ fun beginJoystickTouch(isLeft: Boolean) {
 
     val pointerId = allocatePointerId()
 
+    if (pointerId < 0) {
+        addLog(
+            "${if (isLeft) "LS" else "RS"} NO FREE POINTER ID"
+        )
+        return
+    }
+
     val downOk = adbDriver.sendRawTouchDown(
         pointerId,
         centerX,
@@ -346,6 +354,13 @@ private fun updateAccessibilityJoystick(
         if (existing == null) {
             val pointerId = allocatePointerId()
 
+            if (pointerId < 0) {
+                addLog(
+                    "${if (isLeft) "LS" else "RS"} NO FREE POINTER ID"
+                )
+                return
+            }
+
             controlPointerMap[controlId] = pointerId
 
             accessibility.injectTouchDown(
@@ -370,18 +385,20 @@ private fun updateAccessibilityJoystick(
         synchronized(this) {
             repeat(32) {
                 val id = nextPointerId and 31
-                nextPointerId++
 
-                if (nextPointerId >= 32) {
-                    nextPointerId = 0
-                }
+                nextPointerId = (nextPointerId + 1) and 31
 
                 if (!controlPointerMap.containsValue(id)) {
                     return id
                 }
             }
 
-            return 0
+            Log.e(
+                TAG,
+                "No free MotionEvent pointer ID available"
+            )
+
+            return -1
         }
     }
 
@@ -506,7 +523,7 @@ private fun updateAccessibilityJoystick(
         /*
          * Accessibility is ONLY the selected backend in OVERLAY_HUD.
          */
-        if (activeProfile?.inputMode == InputMode.OVERLAY_HUD || activeProfile?.inputMode == InputMode.SHIZUKU_ADB) {
+        if (activeProfile?.inputMode == InputMode.OVERLAY_HUD) {
             injectAccessibilityButton(item, isPressed)
         }
 
@@ -566,6 +583,13 @@ private fun updateAccessibilityJoystick(
             }
 
             val pointerId = allocatePointerId()
+
+            if (pointerId < 0) {
+                addLog(
+                    "TOUCH [${item.label}] NO FREE POINTER ID"
+                )
+                return
+            }
 
             controlPointerMap[item.id] = pointerId
 
@@ -740,8 +764,17 @@ private fun updateAccessibilityJoystick(
                 val centerY = item?.yPercent?.times(metrics.heightPixels)
                     ?: (metrics.heightPixels / 2f)
 
-                joystickLastPosition.remove(controlId)
-                adbDriver.sendRawTouchUp(pointerId, centerX, centerY)
+                val lastPosition =
+                    joystickLastPosition.remove(controlId)
+
+                val upX = lastPosition?.first ?: centerX
+                val upY = lastPosition?.second ?: centerY
+
+                adbDriver.sendRawTouchUp(
+                    pointerId,
+                    upX,
+                    upY
+                )
             }
         }
 

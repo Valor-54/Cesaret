@@ -38,6 +38,10 @@ class ShizukuInputBridge(customPackageName: String? = null) {
 
         private const val TRANSACTION_TOUCH =
             IBinder.FIRST_CALL_TRANSACTION + 2
+        private const val TRANSACTION_KEY =
+            IBinder.FIRST_CALL_TRANSACTION + 3
+        private const val TRANSACTION_RELEASE_ALL =
+            IBinder.FIRST_CALL_TRANSACTION + 4
 
         const val TOUCH_DOWN = 0
         const val TOUCH_MOVE = 1
@@ -291,6 +295,69 @@ class ShizukuInputBridge(customPackageName: String? = null) {
             )
 
             -101
+        }
+    }
+
+    fun sendKeyState(
+        keyCode: Int,
+        pressed: Boolean
+    ): Boolean {
+        val binder = remote ?: return false
+
+        return try {
+            val data = Parcel.obtain()
+            val reply = Parcel.obtain()
+
+            try {
+                data.writeInterfaceToken(DESCRIPTOR)
+                data.writeInt(keyCode)
+                data.writeInt(if (pressed) 1 else 0)
+
+                binder.transact(
+                    TRANSACTION_KEY,
+                    data,
+                    reply,
+                    0
+                )
+
+                reply.readException()
+                reply.readInt() != 0
+            } finally {
+                data.recycle()
+                reply.recycle()
+            }
+        } catch (e: Throwable) {
+            Log.e(TAG, "Key state gönderilemedi", e)
+            false
+        }
+    }
+
+    fun releaseAllInput(): Boolean {
+        val binder = remote ?: return false
+
+        return try {
+            val data = Parcel.obtain()
+            val reply = Parcel.obtain()
+
+            try {
+                data.writeInterfaceToken(DESCRIPTOR)
+
+                binder.transact(
+                    TRANSACTION_RELEASE_ALL,
+                    data,
+                    reply,
+                    0
+                )
+
+                reply.readException()
+                reply.readInt() != 0
+            } finally {
+                data.recycle()
+                reply.recycle()
+            }
+        } catch (e: Throwable) {
+            Log.e(TAG, "Tüm input bırakılamadı", e)
+            false
         }
     }
 

@@ -7,6 +7,8 @@ import android.os.Parcel
 import android.os.SystemClock
 import android.util.Log
 import android.view.InputDevice
+import android.view.KeyCharacterMap
+import android.view.KeyEvent
 import android.view.MotionEvent
 import java.lang.reflect.Method
 import java.util.concurrent.ConcurrentHashMap
@@ -27,6 +29,10 @@ class InputUserService : Binder() {
 
         private const val TRANSACTION_TOUCH =
             IBinder.FIRST_CALL_TRANSACTION + 2
+        private const val TRANSACTION_KEY =
+            IBinder.FIRST_CALL_TRANSACTION + 3
+        private const val TRANSACTION_RELEASE_ALL =
+            IBinder.FIRST_CALL_TRANSACTION + 4
 
         private const val TOUCH_DOWN = 0
         private const val TOUCH_MOVE = 1
@@ -40,7 +46,9 @@ class InputUserService : Binder() {
     )
 
     private val pointers = ConcurrentHashMap<Int, PointerState>()
+    private val heldKeys = ConcurrentHashMap.newKeySet<Int>()
     private val touchLock = Any()
+    private val keyLock = Any()
     private var gestureDownTime = 0L
 
     private val inputManager: InputManager by lazy {
@@ -128,7 +136,233 @@ class InputUserService : Binder() {
             return true
         }
 
+        if (code == TRANSACTION_KEY) {
+            data.enforceInterface(DESCRIPTOR)
+
+            val keyCode = data.readInt()
+            val pressed = data.readInt() != 0
+
+            val result = injectKey(keyCode, pressed)
+
+            reply?.writeNoException()
+            reply?.writeInt(if (result) 1 else 0)
+            return true
+        }
+
+        if (code == TRANSACTION_RELEASE_ALL) {
+            data.enforceInterface(DESCRIPTOR)
+
+            val result = releaseAllInput()
+
+            reply?.writeNoException()
+            reply?.writeInt(if (result) 1 else 0)
+            return true
+        }
+
         return super.onTransact(code, data, reply, flags)
+    }
+
+    private fun injectKey(
+        keyCode: Int,
+        pressed: Boolean
+    ): Boolean = synchronized(keyLock) {
+        try {
+            if (pressed) {
+                if (!heldKeys.add(keyCode)) {
+                    return true
+                }
+            } else {
+                if (!heldKeys.contains(keyCode)) {
+                    return true
+                }
+            }
+
+            val now = SystemClock.uptimeMillis()
+
+            val event = KeyEvent(
+                now,
+                now,
+                if (pressed) KeyEvent.ACTION_DOWN else KeyEvent.ACTION_UP,
+                keyCode,
+                0,
+                0,
+                KeyCharacterMap.VIRTUAL_KEYBOARD,
+                0,
+                0,
+                InputDevice.SOURCE_KEYBOARD
+            )
+
+            return try {
+                val result = injectMethod.invoke(
+                    inputManager,
+                    event,
+                    0
+                ) as Boolean
+
+                Log.i(
+                    TAG,
+                    "Key ${if (pressed) "DOWN" else "UP"} " +
+                        "keyCode=$keyCode result=$result"
+                )
+
+                if (!result) {
+                    if (pressed) {
+                        heldKeys.remove(keyCode)
+                    }
+                } else if (!pressed) {
+                    heldKeys.remove(keyCode)
+                }
+
+                result
+            } finally {
+                event.recycle()
+            }
+        } catch (e: Throwable) {
+            Log.e(TAG, "Key injection failed keyCode=$keyCode", e)
+            if (pressed) {
+                heldKeys.remove(keyCode)
+            }
+            false
+        }
+    }
+
+    private fun releaseAllInput(): Boolean {
+        var success = true
+
+        /*
+         * Aktif touch gesture'ını gerçek multi-pointer
+         * kapanış sırasıyla güvenli şekilde bitir.
+         */
+        synchronized(touchLock) {
+            while (pointers.size > 1) {
+                val sortedIds =
+                    pointers.keys.sorted()
+
+                val pointerId =
+                    sortedIds.last()
+
+                val index =
+                    sortedIds.indexOf(pointerId)
+
+                try {
+                    val action =
+                        MotionEvent.ACTION_POINTER_UP or
+                            (index shl MotionEvent.ACTION_POINTER_INDEX_SHIFT)
+
+                    val result =
+                        injectMotionEvent(action)
+
+                    if (!result) {
+                        success = false
+                    }
+
+                    Log.i(
+                        TAG,
+                        "Touch POINTER_UP cleanup " +
+                            "pointerId=$pointerId result=$result"
+                    )
+                } catch (e: Throwable) {
+                    Log.e(
+                        TAG,
+                        "Touch pointer cleanup failed " +
+                            "pointerId=$pointerId",
+                        e
+                    )
+                    success = false
+                } finally {
+                    pointers.remove(pointerId)
+                }
+            }
+
+            if (pointers.isNotEmpty()) {
+                try {
+                    val result =
+                        injectMotionEvent(MotionEvent.ACTION_UP)
+
+                    if (!result) {
+                        success = false
+                    }
+
+                    Log.i(
+                        TAG,
+                        "Touch ACTION_UP cleanup result=$result"
+                    )
+                } catch (e: Throwable) {
+                    Log.e(
+                        TAG,
+                        "Touch final release failed",
+                        e
+                    )
+                    success = false
+                } finally {
+                    pointers.clear()
+                    gestureDownTime = 0L
+                }
+            } else {
+                gestureDownTime = 0L
+            }
+        }
+
+        /*
+         * Ardından basılı kalan tüm gerçek KeyEvent'leri UP yap.
+         */
+        synchronized(keyLock) {
+            val keys = heldKeys.toList()
+
+            for (keyCode in keys) {
+                try {
+                    val now = SystemClock.uptimeMillis()
+
+                    val event = KeyEvent(
+                        now,
+                        now,
+                        KeyEvent.ACTION_UP,
+                        keyCode,
+                        0,
+                        0,
+                        KeyCharacterMap.VIRTUAL_KEYBOARD,
+                        0,
+                        0,
+                        InputDevice.SOURCE_KEYBOARD
+                    )
+
+                    try {
+                        val result = injectMethod.invoke(
+                            inputManager,
+                            event,
+                            0
+                        ) as Boolean
+
+                        if (!result) {
+                            success = false
+                        }
+
+                        Log.i(
+                            TAG,
+                            "Key UP cleanup keyCode=$keyCode result=$result"
+                        )
+                    } finally {
+                        event.recycle()
+                    }
+                } catch (e: Throwable) {
+                    Log.e(
+                        TAG,
+                        "Key cleanup failed keyCode=$keyCode",
+                        e
+                    )
+                    success = false
+                }
+            }
+
+            heldKeys.clear()
+        }
+
+        Log.i(
+            TAG,
+            "All injected input released success=$success"
+        )
+
+        return success
     }
 
     private fun injectTouch(
@@ -140,6 +374,14 @@ class InputUserService : Binder() {
         return try {
             when (action) {
                 TOUCH_DOWN -> {
+                    if (pointers.containsKey(pointerId)) {
+                        Log.w(
+                            TAG,
+                            "Duplicate TOUCH_DOWN ignored pointerId=$pointerId"
+                        )
+                        return false
+                    }
+
                     if (pointers.isEmpty()) {
                         gestureDownTime = SystemClock.uptimeMillis()
                         pointers[pointerId] = PointerState(pointerId, x, y)
@@ -280,7 +522,12 @@ class InputUserService : Binder() {
     }
 
     fun destroy() {
-        pointers.clear()
+        releaseAllInput()
+
+        synchronized(touchLock) {
+            pointers.clear()
+            gestureDownTime = 0L
+        }
 
         Log.i(
             TAG,

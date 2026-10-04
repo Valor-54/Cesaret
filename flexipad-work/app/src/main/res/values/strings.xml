@@ -1,0 +1,29 @@
+<resources>
+    <string name="app_name">FlexiPad</string>
+    <string name="app_tagline">Floating Virtual Gamepad &amp; Overlay</string>
+    <string name="start_controls">Kontrolleri Başlat</string>
+    <string name="stop_controls">Kontrolleri Durdur</string>
+    <string name="edit_mode">Düzenleme Modu</string>
+    <string name="reset_controls">Sıfırla</string>
+    <string name="opacity_settings">Şeffaflık Ayarları</string>
+    <string name="joystick_settings">Joystick Ayarları</string>
+    <string name="save_profile">Düzeni Kaydet</string>
+    <string name="load_profile">Düzeni Yükle</string>
+    <string name="geforce_now_mode">GeForce NOW &amp; Bulut Oyun Modu</string>
+    <string name="war_thunder_profile">1. Düzen (Varsayılan Oyun)</string>
+    <string name="xbox_profile">2. Düzen (Xbox Çift Analog)</string>
+    <string name="fps_profile">3. Düzen (FPS / Nişan Düzeni)</string>
+    <string name="notification_title">FlexiPad Gamepad Aktif</string>
+    <string name="notification_desc">Sanal gamepad tuşları ekran üzerinde çalışıyor</string>
+    <string name="notification_stop">Durdur</string>
+    <string name="permission_overlay_title">Ekran Üzerinde Gösterme İzni</string>
+    <string name="permission_overlay_desc">Sanal tuşların GeForce NOW ve diğer oyunlar üzerinde görünebilmesi için \'Diğer uygulamalar üzerinde görüntüleme\' izni gereklidir.</string>
+    <string name="permission_grant">İzin Ver</string>
+    <string name="accessibility_service_desc">GForce ve oyunlarda sanal tuşlara basıldığında ekrana gerçek dokunma ve kaydırma girdisi göndermek için kullanılır.</string>
+    <string name="accessibility_permission_title">Erişilebilirlik Servisi (Gerçek Girdi)</string>
+    <string name="accessibility_permission_desc">Oyunların sanal tuşları algılayabilmesi için sistem düzeyinde dokunma simülasyon izni gereklidir.</string>
+    <string name="layout_1_title">1. Düzen</string>
+    <string name="layout_2_title">2. Düzen</string>
+    <string name="layout_3_title">3. Düzen</string>
+    <string name="tech_feasibility_title">Gerçek Gamepad Girdisi ve Android Güvenliği</string>
+</resources>

@@ -1,0 +1,6 @@
+{
+  "name": "FlexiPad",
+  "description": "Floating virtual gamepad and controller overlay with multi-touch joysticks and persistent layout mapping.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
